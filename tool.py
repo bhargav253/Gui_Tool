@@ -3,17 +3,20 @@
 import sys
 import logging
 from PyQt4 import QtGui, QtCore
+import pandas as pd
+import xlrd
 
-logging.basicConfig(level=logging.DEBUG,
+logging.basicConfig(level=logging.CRITICAL,
                     format='[%(threadName)s] %(message)s',
 ) 
 
-class Example(QtGui.QMainWindow):
+class Gui(QtGui.QMainWindow):
     
     def __init__(self):
-        super(Example, self).__init__()        
+        super(Gui, self).__init__()        
         self.wid = None
         self.table = None
+        self.fname = ''
         self.xcolmns = ['Column1','Column2','Column3','...','...','ColumnN']
         self.hl7_rows = ['OBX1.1','OBX1.2','OBX1.3','OBX2.1','OBX2.2','OBX3']        
 
@@ -34,38 +37,57 @@ class Example(QtGui.QMainWindow):
     def initMenu(self):
         logging.debug("initializing Menu/Tool/Status Bars") 
 
-        exitAction = QtGui.QAction('&Exit', self)
+        exitAction = QtGui.QAction(QtGui.QIcon('exit.png'), '&Exit', self)
         exitAction.setShortcut('Ctrl+Q')
         exitAction.setStatusTip('Exit application')
         exitAction.triggered.connect(self.close)                        
 
-        openFile = QtGui.QAction(QtGui.QIcon('web.png'), "&Open File", self)
+        openFile = QtGui.QAction(QtGui.QIcon('excel.png'), "&Open Excel File", self)
         openFile.setShortcut("Ctrl+F")
-        openFile.setStatusTip('Open Xcel file')
+        openFile.setStatusTip('Open Excel file and map')
         openFile.triggered.connect(self.fileOpen)
+
+        helpAction = QtGui.QAction("&Help", self)
+        helpAction.setShortcut("Ctrl+H")
+        helpAction.triggered.connect(self.helpMessage)        
         
         menubar = self.menuBar()
-        fileMenu = menubar.addMenu('&File')
-        fileMenu.addAction(exitAction)        
+        f_menu = menubar.addMenu('&File')
+        f_menu.addAction(exitAction)        
+        f_menu.addAction(openFile)        
 
-        self.toolbar = self.addToolBar('Open File')
+        h_menu = menubar.addMenu('&Help')
+        h_menu.addAction(helpAction)        
+        
+        self.toolbar = self.addToolBar('Open Excel File')
         self.toolbar.addAction(openFile)
         
         self.statusBar().showMessage('Ready')
 
+    def center(self):
+        qr = self.frameGeometry()
+        cp = QtGui.QDesktopWidget().availableGeometry().center()
+        logging.debug("frame size is " + str(qr) + "center point is " + str(cp)) 
+        qr.moveCenter(cp)
+        self.move(qr.topLeft())
         
+    def runWindow(self):
+        self.resize(400, 800)
+        self.center()
+        self.setWindowTitle('Tool')
+        self.setWindowIcon(QtGui.QIcon('tool.png'))
+        self.show()
+
     def initPage(self):        
         logging.debug("setting Page") 
 
-        btn = QtGui.QPushButton('Create', self)
-        btn.setToolTip('This is a <b>QPushButton</b> widget')
-        #btn.resize(btn.sizeHint())
-        #btn.move(50, 50)       
+        btn = QtGui.QPushButton('Map', self)
+        btn.setToolTip('Select and Map an Excel file columns to OBX commands\n' \
+                        'Click on the excel icon on the top left to select and excel file')
+        btn.clicked.connect(self.setMapping)                
 
         qbtn = QtGui.QPushButton('Quit', self)
-        qbtn.setToolTip('Click to exit applicaton')        
-        #qbtn.resize(qbtn.sizeHint())
-        #qbtn.move(150, 50)
+        qbtn.setToolTip('Exit applicaton')        
         qbtn.clicked.connect(self.close)        
 
         hbox = QtGui.QHBoxLayout()
@@ -79,7 +101,39 @@ class Example(QtGui.QMainWindow):
         vbox.addLayout(hbox)
         
         self.wid.setLayout(vbox)
+                
+    def closeEvent(self, event):
+        reply = QtGui.QMessageBox.question(self, 'Message',
+                                           "Are you sure to quit?", QtGui.QMessageBox.Yes |
+                                           QtGui.QMessageBox.No, QtGui.QMessageBox.No)        
+        if reply == QtGui.QMessageBox.Yes:
+            event.accept()
+        else:
+            event.ignore()                                            
+
+    def helpMessage(self):
+        help_msg = QtGui.QMessageBox.question(self, 'Select a valid file',
+                                              'Please select an xlsx file by clicking on the excel icon ' \
+                                              'on the top left and then start mapping', QtGui.QMessageBox.Ok)
+
         
+    def fileOpen(self):
+        _file = QtGui.QFileDialog.getOpenFileName(self, 'Open File')
+        fname = str(_file)
+        logging.debug("opened " + fname)
+
+        if not fname:
+            pass
+        elif 'xlsx' in fname:
+            self.fname = fname
+            _xfile = pd.read_excel(self.fname)
+            self.xcolmns = _xfile.columns
+            logging.debug("columns found : " + str(self.xcolmns))            
+            self.popTable()
+
+        else:
+            self.helpMessage()
+
     def popTable(self):
         eles = []
         
@@ -92,7 +146,9 @@ class Example(QtGui.QMainWindow):
             
         if not self.table:
             self.table = QtGui.QTableWidget()
-
+            self.table.horizontalHeader().setVisible(False)
+            self.table.verticalHeader().setVisible(False)            
+            
         self.table.setRowCount(len(self.xcolmns))
         self.table.setColumnCount(2)
         
@@ -101,41 +157,27 @@ class Example(QtGui.QMainWindow):
             self.table.setCellWidget(x,0, e[0])
             self.table.setCellWidget(x,1, e[1])            
             x+=1            
-        
-    def closeEvent(self, event):
-        reply = QtGui.QMessageBox.question(self, 'Message',
-                                           "Are you sure to quit?", QtGui.QMessageBox.Yes |
-                                           QtGui.QMessageBox.No, QtGui.QMessageBox.No)        
-        if reply == QtGui.QMessageBox.Yes:
-            event.accept()
-        else:
-            event.ignore()                                            
+
+        header = self.table.horizontalHeader()
+        header.setResizeMode(0, QtGui.QHeaderView.Stretch)
             
-    def center(self):
-        qr = self.frameGeometry()
-        cp = QtGui.QDesktopWidget().availableGeometry().center()
-        logging.debug("frame size is " + str(qr) + "center point is " + str(cp)) 
-        qr.moveCenter(cp)
-        self.move(qr.topLeft())
-        
-    def fileOpen(self):
-        _file = QtGui.QFileDialog.getOpenFileName(self, 'Open File')
-        logging.debug("opened " + str(_file))
+    def setMapping(self):
+        print self.fname
+        if not self.fname:
+            self.helpMessage()
+        else:
+            tab_map = []
+            for row in range(0,self.table.rowCount()):
+                c0 = str(self.table.cellWidget(row,0).text())
+                c1 = str(self.table.cellWidget(row,1).currentText())
+                tab_map.append((c0,c1))
+                logging.debug(c0 + " " + c1)
 
-        self.xcolmns = ['obiwan','yoda','darthvader','luke']
-        self.hl7_rows = ['KBX1.1','KBX1.2','KBX1.3','KBX2.1','KBX2.2','KBX3']
-        self.popTable()
-        
-    def runWindow(self):
-        self.resize(800, 800)
-        self.center()
-        self.setWindowTitle('Tool')
-        self.show()
+            print tab_map
 
-        
 def main():
     app = QtGui.QApplication(sys.argv)
-    ex = Example()
+    ex = Gui()
     sys.exit(app.exec_())
 
 if __name__ == '__main__':
