@@ -9,20 +9,21 @@ import xlrd
 logging.basicConfig(level=logging.CRITICAL,
                     format='[%(threadName)s] %(message)s',
 ) 
-
+    
 class Gui(QtGui.QMainWindow):
     
     def __init__(self):
         super(Gui, self).__init__()        
-        self.wid = None
-        self.table = None
-        self.fname = ''
-        self.xcolmns = ['Column1','Column2','Column3','...','...','ColumnN']
+        self.wid      = None
+        self.table    = None
+        self.m1_e     = None
+        self.m2_e     = None        
+        self.fname    = ''
+        self.xcolmns  = ['Column1','Column2','Column3','...','...','ColumnN']
         self.hl7_rows = ['OBX1.1','OBX1.2','OBX1.3','OBX2.1','OBX2.2','OBX3']        
 
         self.initWindow()
         self.initMenu()        
-        self.popTable()
         self.initPage()                
         self.runWindow()
         
@@ -80,25 +81,49 @@ class Gui(QtGui.QMainWindow):
 
     def initPage(self):        
         logging.debug("setting Page") 
-
+        '''
+        message box 1
+        '''
+        m1_l = QtGui.QLabel("Message box 1")
+        self.m1_e = QtGui.QLineEdit()
+        m1 = QtGui.QVBoxLayout()
+        m1.addWidget(m1_l)
+        m1.addWidget(self.m1_e)        
+        '''
+        message box 2
+        '''
+        m2_l = QtGui.QLabel("Message box 2")
+        self.m2_e = QtGui.QLineEdit()
+        m2 = QtGui.QVBoxLayout()
+        m2.addWidget(m2_l)
+        m2.addWidget(self.m2_e)        
+        '''
+        table
+        '''
+        self.popTable()
+        '''
+        action pane
+        '''        
         btn = QtGui.QPushButton('Map', self)
         btn.setToolTip('Select and Map an Excel file columns to OBX commands\n' \
                         'Click on the excel icon on the top left to select and excel file')
         btn.clicked.connect(self.setMapping)                
-
         qbtn = QtGui.QPushButton('Quit', self)
         qbtn.setToolTip('Exit applicaton')        
         qbtn.clicked.connect(self.close)        
-
-        hbox = QtGui.QHBoxLayout()
-        hbox.addStretch(1)
-        hbox.addWidget(btn)
-        hbox.addWidget(qbtn)
-
+        apane = QtGui.QHBoxLayout()
+        apane.addStretch(1)
+        apane.addWidget(btn)
+        apane.addWidget(qbtn)         
+        '''
+        Page Layout
+        '''        
         vbox = QtGui.QVBoxLayout()
         #vbox.addStretch(1)
+        vbox.addLayout(m1)
+        vbox.addLayout(m2)        
         vbox.addWidget(self.table)
-        vbox.addLayout(hbox)
+        vbox.addLayout(apane)
         
         self.wid.setLayout(vbox)
                 
@@ -165,7 +190,9 @@ class Gui(QtGui.QMainWindow):
         print self.fname
         if not self.fname:
             self.helpMessage()
-        else:
+        else:            
+            m1 = str(self.m1_e.text())
+            m2 = str(self.m2_e.text())
             tab_map = []
             for row in range(0,self.table.rowCount()):
                 c0 = str(self.table.cellWidget(row,0).text())
@@ -173,7 +200,8 @@ class Gui(QtGui.QMainWindow):
                 tab_map.append((c0,c1))
                 logging.debug(c0 + " " + c1)
 
-            print tab_map
+            page = {'msg1' : m1, 'msg2' : m2, 'tbl' : tab_map}
+            print page
 
 def main():
     app = QtGui.QApplication(sys.argv)
