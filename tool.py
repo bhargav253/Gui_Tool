@@ -4,26 +4,38 @@ import sys
 import logging
 from PyQt4 import QtGui, QtCore
 import pandas as pd
+import random
 import xlrd
 
 logging.basicConfig(level=logging.CRITICAL,
                     format='[%(threadName)s] %(message)s',
 ) 
-    
+
+def dict_depth(d):
+    if isinstance(d, dict):
+        return 1 + (max(map(dict_depth, d.values())) if d else 0)
+    return 0
+
 class Gui(QtGui.QMainWindow):
     
-    def __init__(self):
+    def __init__(self,app):
         super(Gui, self).__init__()        
-        self.wid      = None
-        self.table    = None
-        self.m1_e     = None
-        self.m2_e     = None        
-        self.fname    = ''
-        self.xcolmns  = ['Column1','Column2','Column3','...','...','ColumnN']
-        self.hl7_rows = ['OBX1.1','OBX1.2','OBX1.3','OBX2.1','OBX2.2','OBX3']        
+        self.app = app
+        self.wid = None
+        self.table = None
+        self.fname = ''
+        self.xcolmns = ['Column1','Column2','Column3','...','...','ColumnN']
+        self.hl7_seg = {'msh':['msh_1','msh_2'],
+                        'pid': {'pid_1': ['pid_1_1','pid_1_2'],
+                                'pid_2': ['pid_2_1','pid_2_2','pid_2_3']},
+                        'pv' : {'pv_1' : {'pv_1_1' : ['pv_1_1_1','pv_1_1_2'],
+                                          'pv_1_2' : ['pv_1_2_1','pv_1_2_2']},
+                                'pv_2' : {'pv_2_1' : ['pv_2_1_1','pv_2_1_2'],
+                                          'pv_2_2' : ['pv_2_2_1','pv_2_2_2']}}}
 
         self.initWindow()
         self.initMenu()        
+        self.popTable()
         self.initPage()                
         self.runWindow()
         
@@ -65,68 +77,59 @@ class Gui(QtGui.QMainWindow):
         
         self.statusBar().showMessage('Ready')
 
-    def center(self):
-        qr = self.frameGeometry()
-        cp = QtGui.QDesktopWidget().availableGeometry().center()
-        logging.debug("frame size is " + str(qr) + "center point is " + str(cp)) 
-        qr.moveCenter(cp)
-        self.move(qr.topLeft())
+    def setScreen(self):
+        desk_h = self.app.desktop().screenGeometry().height()
+        desk_w = self.app.desktop().screenGeometry().width()
+        self.resize((desk_w/2), (desk_h/2))
+        win_h = self.frameGeometry().height()
+        win_w = self.frameGeometry().width()        
+        self.move((desk_w/4), (desk_h/4))
+        logging.debug("res is " + str(desk_w) + 'x' + str(desk_h) + 
+                      "frame is " + str(win_w) + 'x' + str(win_h))
         
+
     def runWindow(self):
-        self.resize(400, 800)
-        self.center()
+        self.setScreen()
         self.setWindowTitle('Tool')
         self.setWindowIcon(QtGui.QIcon('tool.png'))
         self.show()
 
     def initPage(self):        
         logging.debug("setting Page") 
-        '''
-        message box 1
-        '''
-        m1_l = QtGui.QLabel("Message box 1")
-        self.m1_e = QtGui.QLineEdit()
-        m1 = QtGui.QVBoxLayout()
-        m1.addWidget(m1_l)
-        m1.addWidget(self.m1_e)        
-        '''
-        message box 2
-        '''
-        m2_l = QtGui.QLabel("Message box 2")
-        self.m2_e = QtGui.QLineEdit()
-        m2 = QtGui.QVBoxLayout()
-        m2.addWidget(m2_l)
-        m2.addWidget(self.m2_e)        
-        '''
-        table
-        '''
-        self.popTable()
-        '''
-        action pane
-        '''        
+
         btn = QtGui.QPushButton('Map', self)
         btn.setToolTip('Select and Map an Excel file columns to OBX commands\n' \
                         'Click on the excel icon on the top left to select and excel file')
         btn.clicked.connect(self.setMapping)                
+
         qbtn = QtGui.QPushButton('Quit', self)
         qbtn.setToolTip('Exit applicaton')        
         qbtn.clicked.connect(self.close)        
-        apane = QtGui.QHBoxLayout()
-        apane.addStretch(1)
-        apane.addWidget(btn)
-        apane.addWidget(qbtn)         
-        '''
-        Page Layout
-        '''        
+
+        hbox = QtGui.QHBoxLayout()
+        hbox.addStretch(1)
+        hbox.addWidget(btn)
+        hbox.addWidget(qbtn)
+
         vbox = QtGui.QVBoxLayout()
         #vbox.addStretch(1)
-        vbox.addLayout(m1)
-        vbox.addLayout(m2)        
         vbox.addWidget(self.table)
-        vbox.addLayout(apane)
+        vbox.addLayout(hbox)
         
         self.wid.setLayout(vbox)
                 
+        
+    def make_hl7Menu(self,button,menu,d):
+        for key in d:
+            sub_menu = menu.addMenu(key)
+            if isinstance(d[key], dict):
+                self.make_hl7Menu(button,sub_menu,d[key])
+            else:
+                for v in d[key]:
+                    action = sub_menu.addAction(v)
+                    action.triggered.connect(self.updTable(button,v))
+        
+        
     def closeEvent(self, event):
         reply = QtGui.QMessageBox.question(self, 'Message',
                                            "Are you sure to quit?", QtGui.QMessageBox.Yes |
@@ -136,10 +139,13 @@ class Gui(QtGui.QMainWindow):
         else:
             event.ignore()                                            
 
-    def helpMessage(self):
+    def helpMessage(self):        
         help_msg = QtGui.QMessageBox.question(self, 'Select a valid file',
                                               'Please select an xlsx file by clicking on the excel icon ' \
                                               'on the top left and then start mapping', QtGui.QMessageBox.Ok)
+
+    def updTable(self,button,v):
+        return lambda : button.setText(v)
 
         
     def fileOpen(self):
@@ -159,15 +165,17 @@ class Gui(QtGui.QMainWindow):
         else:
             self.helpMessage()
 
+            
     def popTable(self):
         eles = []
         
         for c in self.xcolmns:
             l = QtGui.QLabel(c)
-            t = QtGui.QComboBox()
-            t.addItems(self.hl7_rows)
-            #t.completer().setCompletionMode(QtGui.QCompleter.PopupCompletion)
-            eles.append((l,t))
+            button = QtGui.QPushButton()
+            menu = QtGui.QMenu()
+            self.make_hl7Menu(button,menu,self.hl7_seg)
+            button.setMenu(menu)
+            eles.append((l,button))
             
         if not self.table:
             self.table = QtGui.QTableWidget()
@@ -180,32 +188,30 @@ class Gui(QtGui.QMainWindow):
         x = 0
         for e in eles:
             self.table.setCellWidget(x,0, e[0])
-            self.table.setCellWidget(x,1, e[1])            
+            self.table.setCellWidget(x,1, e[1])
             x+=1            
 
         header = self.table.horizontalHeader()
-        header.setResizeMode(0, QtGui.QHeaderView.Stretch)
-            
+        header.setResizeMode(0, QtGui.QHeaderView.ResizeToContents)
+        header.setResizeMode(1, QtGui.QHeaderView.Stretch)        
+
     def setMapping(self):
         print self.fname
         if not self.fname:
             self.helpMessage()
-        else:            
-            m1 = str(self.m1_e.text())
-            m2 = str(self.m2_e.text())
+        else:
             tab_map = []
             for row in range(0,self.table.rowCount()):
                 c0 = str(self.table.cellWidget(row,0).text())
-                c1 = str(self.table.cellWidget(row,1).currentText())
+                c1 = str(self.table.cellWidget(row,1).text())
                 tab_map.append((c0,c1))
                 logging.debug(c0 + " " + c1)
 
-            page = {'msg1' : m1, 'msg2' : m2, 'tbl' : tab_map}
-            print page
+            print tab_map
 
 def main():
     app = QtGui.QApplication(sys.argv)
-    ex = Gui()
+    ex = Gui(app)
     sys.exit(app.exec_())
 
 if __name__ == '__main__':
